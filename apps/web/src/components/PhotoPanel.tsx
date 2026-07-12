@@ -1,5 +1,8 @@
-import { Upload, X } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { Crop, RotateCcw, Upload, X, ZoomIn } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import Cropper, { type Area, type Point } from 'react-easy-crop';
+
+import type { CropRect } from '../lib/crop.ts';
 
 export interface UploadedPhoto {
   readonly file: File;
@@ -10,7 +13,9 @@ export interface UploadedPhoto {
 
 interface Props {
   readonly photo: UploadedPhoto | null;
+  readonly aspect: number;
   readonly onChange: (next: UploadedPhoto | null) => void;
+  readonly onCropChange: (crop: CropRect | null) => void;
 }
 
 const ACCEPTED = 'image/jpeg,image/png,image/webp';
@@ -29,10 +34,27 @@ const loadImage = (file: File): Promise<UploadedPhoto> =>
     img.src = objectUrl;
   });
 
-export const PhotoPanel = ({ photo, onChange }: Props) => {
+export const PhotoPanel = ({ photo, aspect, onChange, onCropChange }: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [pixelCrop, setPixelCrop] = useState<CropRect | null>(null);
+
+  // Reset the crop UI whenever a new photo is loaded or the target
+  // aspect changes. react-easy-crop refits automatically, but we still
+  // reset zoom/position so the operator sees a clean starting frame.
+  useEffect(() => {
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setPixelCrop(null);
+  }, [photo?.objectUrl, aspect]);
+
+  // Bubble the pixel crop up to the parent whenever it changes.
+  useEffect(() => {
+    onCropChange(pixelCrop);
+  }, [pixelCrop, onCropChange]);
 
   const handleFiles = useCallback(
     async (files: FileList | null) => {
@@ -58,11 +80,28 @@ export const PhotoPanel = ({ photo, onChange }: Props) => {
     [onChange],
   );
 
-  const openPicker = (): void => inputRef.current?.click();
-  const clear = (): void => {
+  const openPicker = () => inputRef.current?.click();
+  const clear = () => {
     onChange(null);
+    setPixelCrop(null);
     if (inputRef.current) inputRef.current.value = '';
   };
+  const resetCrop = () => {
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+  };
+
+  const handleCropComplete = useCallback(
+    (_area: Area, areaPixels: Area) => {
+      setPixelCrop({
+        x: Math.max(0, Math.round(areaPixels.x)),
+        y: Math.max(0, Math.round(areaPixels.y)),
+        width: Math.max(1, Math.round(areaPixels.width)),
+        height: Math.max(1, Math.round(areaPixels.height)),
+      });
+    },
+    [],
+  );
 
   return (
     <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 shadow-xl shadow-black/20">
@@ -94,18 +133,68 @@ export const PhotoPanel = ({ photo, onChange }: Props) => {
 
       {photo ? (
         <div className="space-y-3">
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-neutral-900">
-            <img
-              src={photo.objectUrl}
-              alt="Uploaded"
-              className="mx-auto max-h-64 w-full object-contain"
+          <div className="relative h-72 w-full overflow-hidden rounded-xl border border-white/10 bg-neutral-900">
+            <Cropper
+              image={photo.objectUrl}
+              crop={crop}
+              zoom={zoom}
+              aspect={aspect}
+              minZoom={1}
+              maxZoom={5}
+              zoomSpeed={0.4}
+              restrictPosition
+              showGrid
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={handleCropComplete}
+              objectFit="contain"
+              classes={{
+                containerClassName: 'photo-cropper-container',
+                mediaClassName: 'photo-cropper-media',
+                cropAreaClassName: 'photo-cropper-area',
+              }}
             />
           </div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
+
+          <div className="flex items-center gap-2">
+            <div className="flex flex-1 items-center gap-2 rounded-lg bg-white/5 px-3 py-2">
+              <ZoomIn className="h-3.5 w-3.5 text-neutral-400" />
+              <input
+                type="range"
+                min={1}
+                max={5}
+                step={0.05}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-white/10"
+                aria-label="Zoom"
+              />
+              <span className="w-8 text-right font-mono text-[11px] text-neutral-300">
+                {zoom.toFixed(1)}×
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={resetCrop}
+              className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-neutral-300 transition hover:bg-white/10 hover:text-white"
+              title="Reset crop position and zoom"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reset
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="rounded-lg bg-white/5 px-3 py-2">
-              <div className="text-neutral-400">Size</div>
+              <div className="text-neutral-400">Source</div>
               <div className="mt-0.5 font-mono text-neutral-100">
-                {photo.width} × {photo.height}
+                {photo.width}×{photo.height}
+              </div>
+            </div>
+            <div className="rounded-lg bg-white/5 px-3 py-2">
+              <div className="text-neutral-400">Crop</div>
+              <div className="mt-0.5 font-mono text-neutral-100">
+                {pixelCrop ? `${pixelCrop.width}×${pixelCrop.height}` : '—'}
               </div>
             </div>
             <div className="rounded-lg bg-white/5 px-3 py-2">
@@ -115,6 +204,12 @@ export const PhotoPanel = ({ photo, onChange }: Props) => {
               </div>
             </div>
           </div>
+
+          <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-neutral-500">
+            <Crop className="mt-0.5 h-3 w-3 shrink-0" />
+            Drag to pan, pinch or scroll to zoom. The crop rectangle stays locked to the
+            selected photo standard&apos;s aspect ratio.
+          </p>
         </div>
       ) : (
         <button

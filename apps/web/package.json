@@ -14,7 +14,8 @@
     "@photosheet/shared": "workspace:*",
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-easy-crop": "^6.2.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

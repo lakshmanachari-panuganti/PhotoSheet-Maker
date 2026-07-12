@@ -443,7 +443,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($flexRuntimesJson)) {
 } else {
     $flexNodeVersions = @($flexRuntimesJson | ConvertFrom-Json) |
         ForEach-Object { $_.version } |
-        Where-Object   { $_ }
+        Where-Object { $_ }
     if ($flexNodeVersions -notcontains $NodeRuntimeVersion.ToString()) {
         Write-Err "Node $NodeRuntimeVersion is NOT offered by Flex Consumption in '$($envCfg.Location)'."
         Write-Err "Versions available here: $($flexNodeVersions -join ', ')"

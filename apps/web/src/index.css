@@ -31,3 +31,15 @@ input[type='range'] {
   background: var(--color-accent-500);
   color: white;
 }
+
+/* react-easy-crop lives inside a dark card; override its defaults so the
+   grid overlay reads as light-on-dark instead of the library's default
+   dark-on-light which disappears against the neutral-900 backdrop. */
+.photo-cropper-container {
+  background: transparent !important;
+}
+.photo-cropper-area {
+  color: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55) !important;
+}

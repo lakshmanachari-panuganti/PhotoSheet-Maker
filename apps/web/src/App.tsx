@@ -14,6 +14,7 @@ import { PhotoPanel, type UploadedPhoto } from './components/PhotoPanel.tsx';
 import { ConfigPanel, type SheetConfig } from './components/ConfigPanel.tsx';
 import { SheetPreview } from './components/SheetPreview.tsx';
 import { ExportBar } from './components/ExportBar.tsx';
+import { defaultCenterCrop, type CropRect } from './lib/crop.ts';
 
 const initialConfig: SheetConfig = {
   photoStandard: 'IN_PASSPORT',
@@ -32,6 +33,7 @@ const initialConfig: SheetConfig = {
 export const App = () => {
   const [photo, setPhoto] = useState<UploadedPhoto | null>(null);
   const [config, setConfig] = useState<SheetConfig>(initialConfig);
+  const [userCrop, setUserCrop] = useState<CropRect | null>(null);
 
   const layoutInput = useMemo(() => {
     const paperDef = PAPER_SIZES[config.paper as Exclude<PaperKey, 'CUSTOM'>];
@@ -61,6 +63,17 @@ export const App = () => {
     };
   }, [config]);
 
+  const targetAspect = layoutInput.photoWidthMm / layoutInput.photoHeightMm;
+
+  // Effective crop rect: user-drawn crop if we have one, otherwise a
+  // sensible default (center-crop the source at the target aspect).
+  // Guarantees SheetPreview and ExportBar always have a valid rect.
+  const effectiveCrop: CropRect | null = useMemo(() => {
+    if (!photo) return null;
+    if (userCrop) return userCrop;
+    return defaultCenterCrop(photo.width, photo.height, targetAspect);
+  }, [photo, userCrop, targetAspect]);
+
   const layout = useMemo(() => computeLayout(layoutInput), [layoutInput]);
 
   const handlePhotoChange = useCallback((next: UploadedPhoto | null) => {
@@ -70,6 +83,11 @@ export const App = () => {
       }
       return next;
     });
+    setUserCrop(null);
+  }, []);
+
+  const handleCropChange = useCallback((next: CropRect | null) => {
+    setUserCrop(next);
   }, []);
 
   return (
@@ -78,13 +96,29 @@ export const App = () => {
 
       <main className="mx-auto grid max-w-[1400px] gap-6 px-6 pb-16 pt-4 lg:grid-cols-[380px_1fr]">
         <aside className="space-y-4">
-          <PhotoPanel photo={photo} onChange={handlePhotoChange} />
+          <PhotoPanel
+            photo={photo}
+            aspect={targetAspect}
+            onChange={handlePhotoChange}
+            onCropChange={handleCropChange}
+          />
           <ConfigPanel config={config} onChange={setConfig} layout={layout} />
         </aside>
 
         <section className="flex flex-col gap-4">
-          <SheetPreview layout={layout} photo={photo} config={config} />
-          <ExportBar layout={layout} photo={photo} config={config} layoutInput={layoutInput} />
+          <SheetPreview
+            layout={layout}
+            photo={photo}
+            crop={effectiveCrop}
+            config={config}
+          />
+          <ExportBar
+            layout={layout}
+            photo={photo}
+            crop={effectiveCrop}
+            config={config}
+            layoutInput={layoutInput}
+          />
         </section>
       </main>
 

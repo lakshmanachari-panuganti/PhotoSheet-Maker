@@ -1,17 +1,55 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { LayoutResult } from '@photosheet/shared';
 
 import type { UploadedPhoto } from './PhotoPanel.tsx';
 import type { SheetConfig } from './ConfigPanel.tsx';
+import { cropToDataUrl, type CropRect } from '../lib/crop.ts';
 
 interface Props {
   readonly layout: LayoutResult;
   readonly photo: UploadedPhoto | null;
+  readonly crop: CropRect | null;
   readonly config: SheetConfig;
 }
 
-export const SheetPreview = ({ layout, photo, config }: Props) => {
+// Render the cropped region of the source photo into an offscreen canvas
+// once per (photo, crop) change. The SVG preview then uses that dataURL
+// as the image href - each cell just needs a normal xMidYMid slice fit,
+// no per-cell offset math. Downscales to 640 px on the long edge; that's
+// plenty for on-screen preview at any zoom.
+const useCroppedDataUrl = (photo: UploadedPhoto | null, crop: CropRect | null): string | null => {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!photo || !crop) {
+      setDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
+      try {
+        setDataUrl(cropToDataUrl(img, crop, 640));
+      } catch {
+        setDataUrl(null);
+      }
+    };
+    img.onerror = () => {
+      if (!cancelled) setDataUrl(null);
+    };
+    img.src = photo.objectUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [photo, crop]);
+
+  return dataUrl;
+};
+
+export const SheetPreview = ({ layout, photo, crop, config }: Props) => {
   const [pageIndex, setPageIndex] = useState(0);
+  const croppedUrl = useCroppedDataUrl(photo, crop);
 
   const clampedPage = useMemo(() => {
     if (!layout.ok) return 0;
@@ -85,13 +123,13 @@ export const SheetPreview = ({ layout, photo, config }: Props) => {
                     strokeWidth={1}
                   />
                 ) : null}
-                {photo ? (
+                {croppedUrl ? (
                   <image
                     x={p.innerX}
                     y={p.innerY}
                     width={p.innerWidth}
                     height={p.innerHeight}
-                    href={photo.objectUrl}
+                    href={croppedUrl}
                     preserveAspectRatio="xMidYMid slice"
                   />
                 ) : (

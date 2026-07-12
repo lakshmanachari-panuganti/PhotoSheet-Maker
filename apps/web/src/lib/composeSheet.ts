@@ -1,11 +1,13 @@
 import type { LayoutInput, LayoutOk } from '@photosheet/shared';
 import { computeLayout } from '@photosheet/shared';
 
+import type { CropRect } from './crop.ts';
 import { injectPngDensity } from './pngDensity.ts';
 
 export interface ComposeInput {
   readonly layoutInput: LayoutInput;
   readonly imageBitmap: ImageBitmap;
+  readonly cropRect: CropRect;
   readonly backgroundHex: string;
   readonly cutMarkWidthPx: number;
 }
@@ -20,6 +22,7 @@ export interface ComposePageResult {
 const drawPage = (
   layout: LayoutOk,
   bitmap: ImageBitmap,
+  cropRect: CropRect,
   pageIndex: number,
   backgroundHex: string,
   cutMarkWidthPx: number,
@@ -35,24 +38,18 @@ const drawPage = (
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
+  // Clamp the crop to the actual source bounds so bad input can't force
+  // drawImage to sample outside the bitmap and produce a black bar.
+  const sx = Math.max(0, Math.min(cropRect.x, bitmap.width - 1));
+  const sy = Math.max(0, Math.min(cropRect.y, bitmap.height - 1));
+  const sw = Math.max(1, Math.min(cropRect.width, bitmap.width - sx));
+  const sh = Math.max(1, Math.min(cropRect.height, bitmap.height - sy));
+
   for (const p of layout.placements) {
     if (p.pageIndex !== pageIndex) continue;
     if (p.width > p.innerWidth) {
       ctx.fillStyle = 'white';
       ctx.fillRect(p.x, p.y, p.width, p.height);
-    }
-    const targetAspect = p.innerWidth / p.innerHeight;
-    const sourceAspect = bitmap.width / bitmap.height;
-    let sx = 0;
-    let sy = 0;
-    let sw = bitmap.width;
-    let sh = bitmap.height;
-    if (sourceAspect > targetAspect) {
-      sw = bitmap.height * targetAspect;
-      sx = (bitmap.width - sw) / 2;
-    } else if (sourceAspect < targetAspect) {
-      sh = bitmap.width / targetAspect;
-      sy = (bitmap.height - sh) / 2;
     }
     ctx.drawImage(bitmap, sx, sy, sw, sh, p.innerX, p.innerY, p.innerWidth, p.innerHeight);
   }
@@ -109,6 +106,7 @@ export const composePagesAsPng = async (
     const canvas = drawPage(
       layout,
       input.imageBitmap,
+      input.cropRect,
       pageIndex,
       input.backgroundHex,
       input.cutMarkWidthPx,
@@ -139,6 +137,7 @@ export const composePagesAsJpg = async (
     const canvas = drawPage(
       layout,
       input.imageBitmap,
+      input.cropRect,
       pageIndex,
       input.backgroundHex,
       input.cutMarkWidthPx,

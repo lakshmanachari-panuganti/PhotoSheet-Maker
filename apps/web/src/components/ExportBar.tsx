@@ -6,17 +6,19 @@ import type { UploadedPhoto } from './PhotoPanel.tsx';
 import type { SheetConfig } from './ConfigPanel.tsx';
 import { composePagesAsJpg, composePagesAsPng } from '../lib/composeSheet.ts';
 import { downloadBlob } from '../lib/download.ts';
+import { defaultCenterCrop, type CropRect } from '../lib/crop.ts';
 
 interface Props {
   readonly layout: LayoutResult;
   readonly layoutInput: LayoutInput;
   readonly photo: UploadedPhoto | null;
+  readonly crop: CropRect | null;
   readonly config: SheetConfig;
 }
 
 type Format = 'png' | 'jpg';
 
-export const ExportBar = ({ layout, layoutInput, photo, config }: Props) => {
+export const ExportBar = ({ layout, layoutInput, photo, crop, config }: Props) => {
   const [busy, setBusy] = useState<Format | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,17 +37,26 @@ export const ExportBar = ({ layout, layoutInput, photo, config }: Props) => {
     setBusy(format);
     try {
       const bitmap = await createImageBitmap(photo.file);
+      const cropRect: CropRect =
+        crop ??
+        defaultCenterCrop(
+          photo.width,
+          photo.height,
+          layoutInput.photoWidthMm / layoutInput.photoHeightMm,
+        );
       const pages =
         format === 'png'
           ? await composePagesAsPng({
               layoutInput,
               imageBitmap: bitmap,
+              cropRect,
               backgroundHex: config.backgroundHex,
               cutMarkWidthPx: 1,
             })
           : await composePagesAsJpg({
               layoutInput,
               imageBitmap: bitmap,
+              cropRect,
               backgroundHex: config.backgroundHex,
               cutMarkWidthPx: 1,
             });
