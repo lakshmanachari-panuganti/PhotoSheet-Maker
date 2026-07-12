@@ -1,6 +1,6 @@
 import { ImageDown, ShieldCheck } from 'lucide-react';
 
-export const Header = (): JSX.Element => (
+export const Header = () => (
   <header className="sticky top-0 z-10 border-b border-white/5 bg-neutral-950/70 backdrop-blur">
     <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-4">
       <div className="flex items-center gap-3">

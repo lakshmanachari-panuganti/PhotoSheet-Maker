@@ -116,7 +116,9 @@ export const composePagesAsPng = async (
     const rawBlob = await canvasToPngBlob(canvas);
     const rawBytes = new Uint8Array(await rawBlob.arrayBuffer());
     const withDensity = injectPngDensity(rawBytes, input.layoutInput.dpi);
-    const finalBlob = new Blob([withDensity], { type: 'image/png' });
+    // Cast: injectPngDensity returns Uint8Array backed by a fresh ArrayBuffer
+    // (never SharedArrayBuffer), but TS 5.7+ can't narrow the generic buffer type.
+    const finalBlob = new Blob([withDensity as BlobPart], { type: 'image/png' });
     results.push({
       pageIndex,
       blob: finalBlob,

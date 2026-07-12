@@ -16,7 +16,7 @@ interface Props {
 
 type Format = 'png' | 'jpg';
 
-export const ExportBar = ({ layout, layoutInput, photo, config }: Props): JSX.Element => {
+export const ExportBar = ({ layout, layoutInput, photo, config }: Props) => {
   const [busy, setBusy] = useState<Format | null>(null);
   const [error, setError] = useState<string | null>(null);
 

@@ -134,7 +134,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-& "$PSScriptRoot\Azure-Connectivity.ps1"
+#& "$PSScriptRoot\Azure-Connectivity.ps1"
 
 # ═══════════════════════════════════════════════════════════════════
 #  PART B.  Configuration (all environment-dependent values here)
@@ -150,9 +150,13 @@ $AppSlug = 'photosheetmakerv1'
 # ── B.1  Per-environment resource names ─────────────────────────────
 #
 # Region choice:
-#   Function App / KV / Storage / AI / RG → centralindia
-#     (Flex Consumption is available in centralindia as of 2026-01;
-#      confirm with `az functionapp list-flexconsumption-locations`)
+#   Function App / KV / Storage / AI / RG → australiaeast
+#     Nearest Flex-Consumption-enabled region to the operator (India).
+#     centralindia was the original choice but Flex Consumption is not
+#     yet enabled there as of 2026-07. If Flex expands to centralindia
+#     later, flip the two lines below back to 'centralindia' - nothing
+#     else in this script depends on the region string. Preflight in
+#     Phase 2 (below) will complain loudly if the region ever loses Flex.
 #   Static Web App                                       → centralus
 #     (SWA regions are limited: eastus2, centralus, westus2, westeurope,
 #      eastasia. Free/Standard SKUs are edge-served globally, so the
@@ -160,7 +164,7 @@ $AppSlug = 'photosheetmakerv1'
 $config = @{
     DEV = @{
         ResourceGroup  = "rg-$AppSlug-dev"
-        Location       = 'centralindia'
+        Location       = 'australiaeast'
         SwaLocation    = 'centralus'
         StorageAccount = "st$AppSlug`dev"     # backtick escapes $AppSlug from `_`
         FunctionApp    = "func-$AppSlug-dev"
@@ -176,7 +180,7 @@ $config = @{
     }
     PRD = @{
         ResourceGroup  = "rg-$AppSlug-prd"
-        Location       = 'centralindia'
+        Location       = 'australiaeast'
         SwaLocation    = 'centralus'
         StorageAccount = "st$AppSlug`prd"
         FunctionApp    = "func-$AppSlug-prd"
@@ -219,7 +223,7 @@ $requiredModules = @(
 # read/write the Functions runtime storage container during Phase 5.
 $sp_BootstrapRoles = @(
     @{ Resource = 'keyvault'; Role = 'Key Vault Secrets Officer'; Why = 'Seed AI connection string in Phase 4' }
-    @{ Resource = 'storage';  Role = 'Storage Blob Data Owner';    Why = 'Allow reading/rewriting host state blobs' }
+    @{ Resource = 'storage'; Role = 'Storage Blob Data Owner'; Why = 'Allow reading/rewriting host state blobs' }
 )
 
 # Function App System-Assigned Managed Identity - runtime access only.
@@ -228,8 +232,8 @@ $sp_BootstrapRoles = @(
 # Owner on the whole blob subresource for identity-based connections; see
 # https://learn.microsoft.com/azure/azure-functions/functions-reference#configure-an-identity-based-connection).
 $mi_RuntimeRoles = @(
-    @{ Resource = 'keyvault';    Role = 'Key Vault Secrets User';    Why = 'Resolve @Microsoft.KeyVault(...) refs at startup' }
-    @{ Resource = 'storage';     Role = 'Storage Blob Data Owner';   Why = 'Identity-based AzureWebJobsStorage host state' }
+    @{ Resource = 'keyvault'; Role = 'Key Vault Secrets User'; Why = 'Resolve @Microsoft.KeyVault(...) refs at startup' }
+    @{ Resource = 'storage'; Role = 'Storage Blob Data Owner'; Why = 'Identity-based AzureWebJobsStorage host state' }
     @{ Resource = 'appinsights'; Role = 'Monitoring Metrics Publisher'; Why = 'AAD-based App Insights telemetry ingest' }
 )
 
@@ -244,9 +248,9 @@ function Write-Step { param([string]$Message)
     Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
 }
 function Write-Success { param([string]$Message); Write-Host "  ✓ $Message" -ForegroundColor Green }
-function Write-Info    { param([string]$Message); Write-Host "  ℹ $Message" -ForegroundColor Yellow }
-function Write-Err     { param([string]$Message); Write-Host "  ✗ $Message" -ForegroundColor Red }
-function Write-Skip    { param([string]$Message); Write-Host "  – $Message" -ForegroundColor DarkGray }
+function Write-Info { param([string]$Message); Write-Host "  ℹ $Message" -ForegroundColor Yellow }
+function Write-Err { param([string]$Message); Write-Host "  ✗ $Message" -ForegroundColor Red }
+function Write-Skip { param([string]$Message); Write-Host "  – $Message" -ForegroundColor DarkGray }
 
 # Idempotent role assignment. Returns 'assigned' | 'existed' | 'failed'.
 function Grant-AzRoleIfMissing {
@@ -287,10 +291,10 @@ function Resolve-RoleScope {
         [Parameter(Mandatory)] $AppInsights
     )
     switch ($ResourceKey) {
-        'storage'     { return @{ Id = $StorageAccount.Id;     Label = "Storage    [$($StorageAccount.StorageAccountName)]" } }
-        'keyvault'    { return @{ Id = $KeyVault.ResourceId;   Label = "KeyVault   [$($KeyVault.VaultName)]" } }
-        'appinsights' { return @{ Id = $AppInsights.Id;        Label = "AppInsights[$($AppInsights.Name)]" } }
-        default       { throw "Unknown role-plan resource key: '$ResourceKey'" }
+        'storage' { return @{ Id = $StorageAccount.Id; Label = "Storage    [$($StorageAccount.StorageAccountName)]" } }
+        'keyvault' { return @{ Id = $KeyVault.ResourceId; Label = "KeyVault   [$($KeyVault.VaultName)]" } }
+        'appinsights' { return @{ Id = $AppInsights.Id; Label = "AppInsights[$($AppInsights.Name)]" } }
+        default { throw "Unknown role-plan resource key: '$ResourceKey'" }
     }
 }
 
@@ -318,7 +322,7 @@ function Invoke-RolePlan {
             -Scope              $scope.Id `
             -ScopeLabel         $scope.Label
         if ($result -eq 'assigned') { $newCount++ }
-        if ($result -eq 'failed')   { $failCount++ }
+        if ($result -eq 'failed') { $failCount++ }
     }
     return @{ New = $newCount; Failed = $failCount }
 }
@@ -399,6 +403,56 @@ Write-Success "Deployer SP       : $spObjectId"
 #  PHASE 2.  Create core resources
 # ─────────────────────────────────────────────────────────────────
 Write-Step "PHASE 2 - Create core resources"
+
+# ── 2.0  Preflight: Flex Consumption region + Node runtime ───────
+# Read-only. Fails BEFORE we create the resource group, so a
+# region/runtime mismatch never leaves an empty RG behind.
+#
+# Two checks:
+#   a. Region is on the Flex-enabled list
+#   b. Node $NodeRuntimeVersion is offered by Flex in that region
+#
+# If either fails, the script prints the full supported list and exits
+# so the operator can update Part B.1 without guesswork.
+Write-Info "Preflight: Flex Consumption availability in '$($envCfg.Location)' ..."
+
+$flexRegionsJson = az functionapp list-flexconsumption-locations --output json 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($flexRegionsJson)) {
+    throw "az functionapp list-flexconsumption-locations failed. Check az CLI is up to date (az upgrade) and that the current subscription has access to Flex Consumption."
+}
+$flexRegions = @($flexRegionsJson | ConvertFrom-Json) | ForEach-Object { $_.name.ToLower() }
+
+if ($flexRegions -notcontains $envCfg.Location.ToLower()) {
+    Write-Err "Region '$($envCfg.Location)' is NOT enabled for Flex Consumption."
+    Write-Err ""
+    Write-Err "Supported regions:"
+    foreach ($r in ($flexRegions | Sort-Object)) { Write-Err "  - $r" }
+    Write-Err ""
+    Write-Err "Fix: edit Part B.1 in this script and set Location for $Environment to one of the above."
+    Write-Err "Nearest to India (in latency order): southeastasia, eastasia, australiaeast."
+    exit 1
+}
+Write-Success "Flex Consumption enabled in : $($envCfg.Location)"
+
+$flexRuntimesJson = az functionapp list-flexconsumption-runtimes `
+    --location $envCfg.Location `
+    --runtime  node `
+    --output   json 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($flexRuntimesJson)) {
+    Write-Info "Could not enumerate Node runtimes in '$($envCfg.Location)'. Continuing - the create call will surface a clearer error if the runtime is unavailable."
+} else {
+    $flexNodeVersions = @($flexRuntimesJson | ConvertFrom-Json) |
+        ForEach-Object { $_.version } |
+        Where-Object   { $_ }
+    if ($flexNodeVersions -notcontains $NodeRuntimeVersion.ToString()) {
+        Write-Err "Node $NodeRuntimeVersion is NOT offered by Flex Consumption in '$($envCfg.Location)'."
+        Write-Err "Versions available here: $($flexNodeVersions -join ', ')"
+        Write-Err "Fix: set `$NodeRuntimeVersion in Part B.2 to one of the versions above,"
+        Write-Err "     or change Location in Part B.1 to a region that offers Node $NodeRuntimeVersion."
+        exit 1
+    }
+    Write-Success "Node $NodeRuntimeVersion offered by Flex in : $($envCfg.Location)"
+}
 
 # ── 2.1  Resource Group ──────────────────────────────────────────
 $rg = Get-AzResourceGroup -Name $envCfg.ResourceGroup -ErrorAction SilentlyContinue
@@ -533,7 +587,12 @@ Failed to create Function App on Flex Consumption. Common causes:
 }
 
 # ── 2.4a  Function App httpsOnly enforcement ─────────────────────
-if ($functionApp.httpsOnly -eq $true) {
+$httpsOnlyEnabled = $null
+if ($functionApp.PSObject.Properties.Match('properties').Count -gt 0 -and $functionApp.properties) {
+    $httpsOnlyEnabled = $functionApp.properties.httpsOnly
+}
+
+if ($httpsOnlyEnabled -eq $true) {
     Write-Skip "Function App httpsOnly       : already true"
 } else {
     az functionapp update `
@@ -578,15 +637,22 @@ if ($keyVault) {
 } else {
     Write-Info "Creating Key Vault           : $($envCfg.KeyVault)"
     $kvParams = @{
-        Name                    = $envCfg.KeyVault
-        ResourceGroupName       = $envCfg.ResourceGroup
-        Location                = $envCfg.Location
-        Sku                     = 'Standard'
-        EnableRbacAuthorization = $true
-        EnablePurgeProtection   = $true
+        Name                  = $envCfg.KeyVault
+        ResourceGroupName     = $envCfg.ResourceGroup
+        Location              = $envCfg.Location
+        Sku                   = 'Standard'
+        EnablePurgeProtection = $true
     }
     Write-Info "Purge protection enabled on Key Vault (irreversible)"
     $keyVault = New-AzKeyVault @kvParams
+    az keyvault update `
+        --name               $envCfg.KeyVault `
+        --resource-group     $envCfg.ResourceGroup `
+        --enable-rbac-authorization true `
+        --enable-purge-protection    true `
+        --output             none
+    if ($LASTEXITCODE -ne 0) { throw "Failed to enable Key Vault RBAC authorization on new vault." }
+    $keyVault = Get-AzKeyVault -ResourceGroupName $envCfg.ResourceGroup -VaultName $envCfg.KeyVault
     Write-Success "Key Vault created            : $($envCfg.KeyVault)"
 }
 
@@ -636,6 +702,36 @@ if ($swaExisted) {
         --output         json | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0) { throw "Failed to create Static Web App." }
     Write-Success "Static Web App created       : $($envCfg.StaticWebApp)"
+}
+
+# Keep the deployment cost-free. If the SWA already exists on a paid SKU,
+# downgrade it back to Free. Backend linking is skipped for Free SKUs.
+if ($staticWebApp.sku.name -ne 'Free') {
+    $existingBackends = az staticwebapp backends show `
+        --name           $envCfg.StaticWebApp `
+        --resource-group $envCfg.ResourceGroup `
+        --output         json 2>$null
+    if (-not [string]::IsNullOrWhiteSpace($existingBackends)) {
+        Write-Info "Removing existing SWA backend link before Free SKU downgrade"
+        az staticwebapp backends unlink `
+            --name           $envCfg.StaticWebApp `
+            --resource-group $envCfg.ResourceGroup `
+            --output         none | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Failed to unlink SWA backend before downgrading to Free." }
+    }
+
+    Write-Info "Setting Static Web App SKU   : Free"
+    az staticwebapp update `
+        --name           $envCfg.StaticWebApp `
+        --resource-group $envCfg.ResourceGroup `
+        --sku            Free `
+        --output         none
+    if ($LASTEXITCODE -ne 0) { throw "Failed to set Static Web App SKU to Free." }
+    $staticWebApp = az staticwebapp show `
+        --name           $envCfg.StaticWebApp `
+        --resource-group $envCfg.ResourceGroup `
+        --output         json | ConvertFrom-Json
+    Write-Success "Static Web App SKU           : Free"
 }
 
 # Add the SWA default hostname to the CORS allow list. Custom domains
@@ -732,7 +828,8 @@ $alwaysOverwrite = @{
     'APPLICATIONINSIGHTS_AUTHENTICATION_STRING' = 'Authorization=AAD'
 
     # Runtime
-    'FUNCTIONS_WORKER_RUNTIME'                  = 'node'
+    # Flex Consumption infers the worker runtime from creation-time config;
+    # setting FUNCTIONS_WORKER_RUNTIME here is rejected by the platform.
     'WEBSITE_RUN_FROM_PACKAGE'                  = '1'
 
     # App-level config
@@ -761,17 +858,21 @@ foreach ($k in $defaultIfAbsent.Keys) {
     }
 }
 
-# Send merged settings in a single call. Serialize each entry as
-# key=value; az functionapp config appsettings set MERGES with existing.
-$settingsArgs = @()
-foreach ($k in $mergedSettings.Keys) { $settingsArgs += "$k=$($mergedSettings[$k])" }
+# Send merged settings from a temp JSON file so values that contain commas
+# or semicolons do not trip inline CLI parsing on Windows.
+$settingsFile = Join-Path $env:TEMP "photosheet-appsettings-$($envCfg.FunctionApp).json"
+try {
+    $mergedSettings | ConvertTo-Json -Depth 10 | Set-Content -Path $settingsFile -Encoding utf8
 
-az functionapp config appsettings set `
-    --name           $envCfg.FunctionApp `
-    --resource-group $envCfg.ResourceGroup `
-    --settings       @settingsArgs `
-    --output         none
-if ($LASTEXITCODE -ne 0) { throw "Failed to apply Function App settings." }
+    az functionapp config appsettings set `
+        --name           $envCfg.FunctionApp `
+        --resource-group $envCfg.ResourceGroup `
+        --settings       "@$settingsFile" `
+        --output         none
+    if ($LASTEXITCODE -ne 0) { throw "Failed to apply Function App settings." }
+} finally {
+    Remove-Item -Path $settingsFile -Force -ErrorAction SilentlyContinue
+}
 Write-Success "App settings applied         : $($mergedSettings.Count) keys"
 
 # ── 5.2  Function App platform CORS ──────────────────────────────
@@ -783,18 +884,26 @@ $currentCorsJson = az functionapp cors show `
 $currentCors = if ([string]::IsNullOrWhiteSpace($currentCorsJson)) { @() } else {
     ($currentCorsJson | ConvertFrom-Json).allowedOrigins
 }
-$desiredSet = @($envCfg.CorsOrigins) | Sort-Object -Unique
-$currentSet = @($currentCors) | Sort-Object -Unique
-if (Compare-Object -ReferenceObject $currentSet -DifferenceObject $desiredSet -SyncWindow 0) {
+$desiredSet = @($envCfg.CorsOrigins)
+if ($null -eq $desiredSet) { $desiredSet = @() }
+$desiredSet = @($desiredSet | Sort-Object -Unique)
+
+$currentSet = @($currentCors)
+if ($null -eq $currentSet) { $currentSet = @() }
+$currentSet = @($currentSet | Sort-Object -Unique)
+
+$desiredCorsKey = ($desiredSet -join "`n")
+$currentCorsKey = ($currentSet -join "`n")
+if ($currentCorsKey -ne $desiredCorsKey) {
     Write-Info "Updating Function App CORS   : $($desiredSet -join ', ')"
-    foreach ($existingOrigin in $currentCors) {
+    foreach ($existingOrigin in $currentSet) {
         az functionapp cors remove `
             --name           $envCfg.FunctionApp `
             --resource-group $envCfg.ResourceGroup `
             --allowed-origins $existingOrigin `
             --output         none 2>$null | Out-Null
     }
-    foreach ($origin in $envCfg.CorsOrigins) {
+    foreach ($origin in $desiredSet) {
         az functionapp cors add `
             --name           $envCfg.FunctionApp `
             --resource-group $envCfg.ResourceGroup `
@@ -858,22 +967,48 @@ if ($miRuntimeOutcome.New -gt 0) {
 # ─────────────────────────────────────────────────────────────────
 # SWA linking creates the /api reverse proxy: requests to
 # https://<swa-hostname>/api/generate hit the Function App directly.
-# The link uses the FA managed identity, no shared secret involved.
+# The link is only possible on Standard / Dedicated SWA SKUs.
 Write-Step "PHASE 7 - Link SWA backend to Function App"
 
 $existingBackends = az staticwebapp backends show `
     --name           $envCfg.StaticWebApp `
     --resource-group $envCfg.ResourceGroup `
     --output         json 2>$null
-$backendsList = if ([string]::IsNullOrWhiteSpace($existingBackends)) { @() } else {
-    @($existingBackends | ConvertFrom-Json)
+$backendsList = @()
+if (-not [string]::IsNullOrWhiteSpace($existingBackends)) {
+    $parsedBackends = $existingBackends | ConvertFrom-Json
+    if ($null -ne $parsedBackends) {
+        if ($parsedBackends -is [System.Array]) {
+            $backendsList = @($parsedBackends)
+        } else {
+            $backendsList = @($parsedBackends)
+        }
+    }
 }
 
-$currentBackendId = if ($backendsList.Count -gt 0 -and $backendsList[0].PSObject.Properties['backendResourceId']) {
-    $backendsList[0].backendResourceId
-} else { $null }
+$currentBackendId = $null
+if ($backendsList.Length -gt 0) {
+    $firstBackend = $backendsList[0]
+    if ($firstBackend.PSObject.Properties.Match('backendResourceId').Count -gt 0) {
+        $currentBackendId = $firstBackend.backendResourceId
+    } elseif ($firstBackend.PSObject.Properties.Match('resourceId').Count -gt 0) {
+        $currentBackendId = $firstBackend.resourceId
+    }
+}
 
-if ($currentBackendId -eq $faResource.ResourceId) {
+if ($staticWebApp.sku.name -eq 'Free') {
+    if ($currentBackendId) {
+        Write-Info "Removing SWA backend link   : Free SKU does not support backend linkage"
+        az staticwebapp backends unlink `
+            --name           $envCfg.StaticWebApp `
+            --resource-group $envCfg.ResourceGroup `
+            --output         none | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Failed to unlink SWA backend." }
+        Write-Success "SWA backend unlinked         : Free SKU"
+    } else {
+        Write-Skip "SWA backend link skipped     : Free SKU"
+    }
+} elseif ($currentBackendId -eq $faResource.ResourceId) {
     Write-Skip "SWA backend already linked   : $($envCfg.FunctionApp)"
 } elseif ($currentBackendId) {
     Write-Info "SWA backend points to a different resource - re-linking."
@@ -984,8 +1119,8 @@ Write-Step "PHASE 9 - GitHub Actions CI Service Principal (OIDC)"
 
 # 9.0  Repo + per-environment subject claims
 $GitHubOwner = 'lakshmanachari-panuganti'
-$GitHubRepo  = 'PhotoSheet-Maker'
-$ciSpName    = "sp-github-actions-$AppSlug-$($Environment.ToLower())"
+$GitHubRepo = 'PhotoSheet-Maker'
+$ciSpName = "sp-github-actions-$AppSlug-$($Environment.ToLower())"
 
 $federatedSubjects = if ($Environment -eq 'PRD') {
     @(@{
@@ -1045,17 +1180,23 @@ foreach ($fc in $federatedSubjects) {
         continue
     }
     Write-Info "Adding federated credential : $($fc.Name)"
-    $params = @{
-        name      = $fc.Name
-        issuer    = 'https://token.actions.githubusercontent.com'
-        subject   = $fc.Subject
-        audiences = @('api://AzureADTokenExchange')
-    } | ConvertTo-Json -Compress
-    az ad app federated-credential create --id $ciApp.id --parameters $params --output none
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to add federated credential '$($fc.Name)' on $ciSpName."
+    $fedFile = Join-Path $env:TEMP "photosheet-fedcred-$($ciSpName)-$($fc.Name).json"
+    try {
+        @{
+            name      = $fc.Name
+            issuer    = 'https://token.actions.githubusercontent.com'
+            subject   = $fc.Subject
+            audiences = @('api://AzureADTokenExchange')
+        } | ConvertTo-Json -Depth 5 | Set-Content -Path $fedFile -Encoding utf8
+
+        az ad app federated-credential create --id $ciApp.id --parameters "@$fedFile" --output none
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to add federated credential '$($fc.Name)' on $ciSpName."
+        }
+        Write-Success "Federated credential added : $($fc.Name)"
+    } finally {
+        Remove-Item -Path $fedFile -Force -ErrorAction SilentlyContinue
     }
-    Write-Success "Federated credential added : $($fc.Name)"
 }
 
 # 9.4  RBAC: minimal role for zip-deploy on the Function App resource.
@@ -1072,7 +1213,7 @@ $ciRoleOutcome = Grant-AzRoleIfMissing `
 
 # 9.5  Print the values to paste into GitHub repo secrets
 $tenantId = $context.Tenant.Id
-$subId    = $context.Subscription.Id
+$subId = $context.Subscription.Id
 $envUpper = $Environment.ToUpper()
 
 Write-Host ''

@@ -55,7 +55,7 @@ const Slider = ({
   step?: number;
   unit: string;
   onChange: (v: number) => void;
-}): JSX.Element => (
+}) => (
   <label className="block">
     <div className="mb-1 flex items-center justify-between text-xs">
       <span className="text-neutral-400">{label}</span>
@@ -86,7 +86,7 @@ const Select = <T extends string>({
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (v: T) => void;
-}): JSX.Element => (
+}) => (
   <label className="block">
     <div className="mb-1 text-xs text-neutral-400">{label}</div>
     <select
@@ -111,7 +111,7 @@ const Toggle = ({
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
-}): JSX.Element => (
+}) => (
   <button
     type="button"
     onClick={() => onChange(!checked)}
@@ -136,7 +136,7 @@ const Toggle = ({
   </button>
 );
 
-export const ConfigPanel = ({ config, onChange, layout }: Props): JSX.Element => {
+export const ConfigPanel = ({ config, onChange, layout }: Props) => {
   return (
     <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 shadow-xl shadow-black/20">
       <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-400">

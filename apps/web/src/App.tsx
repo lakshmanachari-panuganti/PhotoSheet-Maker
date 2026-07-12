@@ -29,7 +29,7 @@ const initialConfig: SheetConfig = {
   backgroundHex: '#FFFFFF',
 };
 
-export const App = (): JSX.Element => {
+export const App = () => {
   const [photo, setPhoto] = useState<UploadedPhoto | null>(null);
   const [config, setConfig] = useState<SheetConfig>(initialConfig);
 

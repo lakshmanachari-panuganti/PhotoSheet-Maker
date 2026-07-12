@@ -10,7 +10,7 @@ interface Props {
   readonly config: SheetConfig;
 }
 
-export const SheetPreview = ({ layout, photo, config }: Props): JSX.Element => {
+export const SheetPreview = ({ layout, photo, config }: Props) => {
   const [pageIndex, setPageIndex] = useState(0);
 
   const clampedPage = useMemo(() => {
@@ -147,7 +147,7 @@ const Stat = ({
 }: {
   label: string;
   children: React.ReactNode;
-}): JSX.Element => (
+}) => (
   <div className="rounded-lg bg-white/5 px-3 py-2">
     <div className="text-neutral-400">{label}</div>
     <div className="mt-0.5 font-mono text-neutral-100">{children}</div>

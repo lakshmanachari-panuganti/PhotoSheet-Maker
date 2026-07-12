@@ -29,7 +29,7 @@ const loadImage = (file: File): Promise<UploadedPhoto> =>
     img.src = objectUrl;
   });
 
-export const PhotoPanel = ({ photo, onChange }: Props): JSX.Element => {
+export const PhotoPanel = ({ photo, onChange }: Props) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
