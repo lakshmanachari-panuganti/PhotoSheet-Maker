@@ -1,4 +1,4 @@
-import { Crop, RotateCcw, Upload, X, ZoomIn } from 'lucide-react';
+import { Crop, Lock, LockOpen, RotateCcw, Upload, X, ZoomIn } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Cropper, { type Area, type Point } from 'react-easy-crop';
 
@@ -41,14 +41,18 @@ export const PhotoPanel = ({ photo, aspect, onChange, onCropChange }: Props) => 
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [pixelCrop, setPixelCrop] = useState<CropRect | null>(null);
+  const [locked, setLocked] = useState(false);
 
   // Reset the crop UI whenever a new photo is loaded or the target
   // aspect changes. react-easy-crop refits automatically, but we still
   // reset zoom/position so the operator sees a clean starting frame.
+  // Lock is released as well; a fresh photo shouldn't inherit a lock
+  // from the previous one.
   useEffect(() => {
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setPixelCrop(null);
+    setLocked(false);
   }, [photo?.objectUrl, aspect]);
 
   // Bubble the pixel crop up to the parent whenever it changes.
@@ -87,9 +91,12 @@ export const PhotoPanel = ({ photo, aspect, onChange, onCropChange }: Props) => 
     if (inputRef.current) inputRef.current.value = '';
   };
   const resetCrop = () => {
+    if (locked) return;
     setCrop({ x: 0, y: 0 });
     setZoom(1);
   };
+
+  const toggleLock = () => setLocked((v) => !v);
 
   const handleCropComplete = useCallback(
     (_area: Area, areaPixels: Area) => {
@@ -133,31 +140,56 @@ export const PhotoPanel = ({ photo, aspect, onChange, onCropChange }: Props) => 
 
       {photo ? (
         <div className="space-y-3">
-          <div className="relative h-72 w-full overflow-hidden rounded-xl border border-white/10 bg-neutral-900">
-            <Cropper
-              image={photo.objectUrl}
-              crop={crop}
-              zoom={zoom}
-              aspect={aspect}
-              minZoom={1}
-              maxZoom={5}
-              zoomSpeed={0.4}
-              restrictPosition
-              showGrid
-              onCropChange={setCrop}
-              onZoomChange={setZoom}
-              onCropComplete={handleCropComplete}
-              objectFit="contain"
-              classes={{
-                containerClassName: 'photo-cropper-container',
-                mediaClassName: 'photo-cropper-media',
-                cropAreaClassName: 'photo-cropper-area',
-              }}
-            />
+          <div
+            className={`relative h-72 w-full overflow-hidden rounded-xl border bg-neutral-900 transition ${
+              locked ? 'border-emerald-400/50 ring-1 ring-emerald-400/30' : 'border-white/10'
+            }`}
+          >
+            {/* Setting pointer-events: none on the wrapper stops react-easy-crop
+                from receiving mouse, touch, and wheel events, so pan/pinch/zoom
+                are all blocked at once. The crop values in state are what the
+                library re-renders from, so the visible frame stays exactly
+                where it was when the user hit "Lock". */}
+            <div
+              className="absolute inset-0"
+              style={locked ? { pointerEvents: 'none' } : undefined}
+            >
+              <Cropper
+                image={photo.objectUrl}
+                crop={crop}
+                zoom={zoom}
+                aspect={aspect}
+                minZoom={1}
+                maxZoom={5}
+                zoomSpeed={0.4}
+                restrictPosition
+                showGrid={!locked}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={handleCropComplete}
+                objectFit="contain"
+                classes={{
+                  containerClassName: 'photo-cropper-container',
+                  mediaClassName: 'photo-cropper-media',
+                  cropAreaClassName: 'photo-cropper-area',
+                }}
+              />
+            </div>
+
+            {locked ? (
+              <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-400/15 px-2 py-1 text-[10px] font-medium uppercase tracking-widest text-emerald-200 backdrop-blur">
+                <Lock className="h-3 w-3" />
+                Locked
+              </div>
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex flex-1 items-center gap-2 rounded-lg bg-white/5 px-3 py-2">
+            <div
+              className={`flex flex-1 items-center gap-2 rounded-lg bg-white/5 px-3 py-2 transition ${
+                locked ? 'opacity-40' : ''
+              }`}
+            >
               <ZoomIn className="h-3.5 w-3.5 text-neutral-400" />
               <input
                 type="range"
@@ -165,8 +197,9 @@ export const PhotoPanel = ({ photo, aspect, onChange, onCropChange }: Props) => 
                 max={5}
                 step={0.05}
                 value={zoom}
+                disabled={locked}
                 onChange={(e) => setZoom(Number(e.target.value))}
-                className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-white/10"
+                className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-white/10 disabled:cursor-not-allowed"
                 aria-label="Zoom"
               />
               <span className="w-8 text-right font-mono text-[11px] text-neutral-300">
@@ -176,11 +209,26 @@ export const PhotoPanel = ({ photo, aspect, onChange, onCropChange }: Props) => 
             <button
               type="button"
               onClick={resetCrop}
-              className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-neutral-300 transition hover:bg-white/10 hover:text-white"
+              disabled={locked}
+              className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-neutral-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/5 disabled:hover:text-neutral-300"
               title="Reset crop position and zoom"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Reset
+            </button>
+            <button
+              type="button"
+              onClick={toggleLock}
+              aria-pressed={locked}
+              className={`flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                locked
+                  ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-200 hover:bg-emerald-400/25'
+                  : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10 hover:text-white'
+              }`}
+              title={locked ? 'Unlock crop for further adjustments' : 'Lock crop so scrolling and taps do not move it'}
+            >
+              {locked ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+              {locked ? 'Unlock' : 'Lock'}
             </button>
           </div>
 
@@ -207,8 +255,9 @@ export const PhotoPanel = ({ photo, aspect, onChange, onCropChange }: Props) => 
 
           <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-neutral-500">
             <Crop className="mt-0.5 h-3 w-3 shrink-0" />
-            Drag to pan, pinch or scroll to zoom. The crop rectangle stays locked to the
-            selected photo standard&apos;s aspect ratio.
+            {locked
+              ? 'Locked. Tap "Unlock" to adjust position or zoom again.'
+              : 'Drag to pan, pinch or scroll to zoom. Tap "Lock" once framed so scrolling the page cannot move it.'}
           </p>
         </div>
       ) : (
